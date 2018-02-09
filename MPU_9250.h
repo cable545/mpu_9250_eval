@@ -37,6 +37,7 @@
 #define ACCEL_CONFIG2     0x1D
 #define FIFO_EN           0x23
 #define I2C_MST_CTRL      0x24
+#define INT_PIN_CFG       0x37
 #define INT_ENABLE        0x38
 #define INT_STATUS        0x3A
 #define ACCEL_XOUT_H      0x3B
@@ -45,6 +46,8 @@
 #define ACCEL_YOUT_L      0x3E
 #define ACCEL_ZOUT_H      0x3F
 #define ACCEL_ZOUT_L      0x40
+#define TEMP_OUT_H        0x41
+#define TEMP_OUT_L        0x42
 #define GYRO_XOUT_H       0x43
 #define GYRO_XOUT_L       0x44
 #define GYRO_YOUT_H       0x45
@@ -89,6 +92,14 @@
 
 #define CALIBRATION_ROUNDS 10000
 
+#define MAG_BIAS_X  139.34f
+#define MAG_BIAS_Y  359.62f
+#define MAG_BIAS_Z  69.35f
+
+#define MAG_SCALE_X 1.02f
+#define MAG_SCALE_Y 1.03f
+#define MAG_SCALE_Z 0.96f
+
 class MPU_9250
 {
   protected:
@@ -99,12 +110,13 @@ class MPU_9250
   
     uint8_t Mscale = MFS_16BITS;
     // 2 for 8 Hz, 6 for 100 Hz continuous magnetometer data read
-    uint8_t Mmode = 0x02;
+    uint8_t Mmode = 0x06;
   
 	public:
+    MPU_9250();
     // Bias corrections for gyro and accelerometer
     float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};
-    float magCalibration[3] = {0, 0, 0}, magbias[3] = {0, 0, 0};
+    float magCalibration[3] = {0, 0, 0}, magBias[3] = {0, 0, 0}, magScale[3] = {0, 0, 0};
     float aRes, gRes, mRes;
 
     bool initAK8963(float* destination);
@@ -114,8 +126,9 @@ class MPU_9250
 		uint8_t readByte(uint8_t address, uint8_t subAddress);
 		void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t * dest);
     void getMres();
+    void readAccGyroData(int16_t* destination);
     void readAccelData(int16_t* destination);
     void readGyroData(int16_t* destination);
-    void readMagData(int16_t * destination);
+    bool readMagData(int16_t * destination);
     void calcMagCalibrationData(float* dest1, float* dest2);
 };

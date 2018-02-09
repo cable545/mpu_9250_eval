@@ -1,5 +1,16 @@
 #include "MPU_9250.h"
 
+MPU_9250::MPU_9250(void)
+{
+  magBias[0] = MAG_BIAS_X;
+  magBias[1] = MAG_BIAS_Y;
+  magBias[2] = MAG_BIAS_Z;
+
+  magScale[0] = MAG_SCALE_X;
+  magScale[1] = MAG_SCALE_Y;
+  magScale[2] = MAG_SCALE_Z;
+}
+
 // Wire.h read and write protocols
 void MPU_9250::writeByte(uint8_t address, uint8_t subAddress, uint8_t data)
 {
@@ -68,7 +79,20 @@ void MPU_9250::readGyroData(int16_t* destination)
   destination[2] = ((int16_t)rawData[4] << 8) | rawData[5] ; 
 }
 
-void MPU_9250::readMagData(int16_t * destination)
+void MPU_9250::readAccGyroData(int16_t* destination)
+{
+  uint8_t rawData[14];
+  readBytes(MPU9250_ADDRESS, ACCEL_XOUT_H, 14, &rawData[0]);  // Read the fourteen raw data registers into data array
+  destination[0] = ((int16_t)rawData[0] << 8) | rawData[1] ;  // Turn the MSB and LSB into a signed 16-bit value
+  destination[1] = ((int16_t)rawData[2] << 8) | rawData[3] ;
+  destination[2] = ((int16_t)rawData[4] << 8) | rawData[5] ;
+
+  destination[3] = ((int16_t)rawData[8] << 8) | rawData[9] ;  // Turn the MSB and LSB into a signed 16-bit value
+  destination[4] = ((int16_t)rawData[10] << 8) | rawData[11] ;
+  destination[5] = ((int16_t)rawData[12] << 8) | rawData[13] ;
+}
+
+bool MPU_9250::readMagData(int16_t* destination)
 {
   // x/y/z gyro register data, ST2 register stored here, must read ST2 at end of
   // data acquisition
@@ -87,8 +111,12 @@ void MPU_9250::readMagData(int16_t * destination)
       // Data stored as little Endian 
       destination[1] = ((int16_t)rawData[3] << 8) | rawData[2];
       destination[2] = ((int16_t)rawData[5] << 8) | rawData[4];
+
+      return true;
     }
   }
+  
+  return false;
 }
 
 bool MPU_9250::initAK8963(float* destination)
@@ -112,6 +140,8 @@ bool MPU_9250::initAK8963(float* destination)
     // and enable continuous mode data acquisition Mmode (bits [3:0]), 0010 for 8 Hz and 0110 for 100 Hz sample rates
     writeByte(AK8963_ADDRESS, AK8963_CNTL, Mscale << 4 | Mmode); // Set magnetometer data resolution and sample ODR
     delay(10);
+
+    getMres();
 
     return true;
   }
@@ -175,6 +205,7 @@ bool MPU_9250::initMPU9250()
     // Set interrupt pin active high, push-pull, hold interrupt pin level HIGH until interrupt cleared,
     // clear on read of INT_STATUS, and enable I2C_BYPASS_EN so additional chips 
     // can join the I2C bus and all can be controlled by the Arduino as master
+    writeByte(MPU9250_ADDRESS, INT_PIN_CFG, 0x22);
     writeByte(MPU9250_ADDRESS, INT_ENABLE, 0x01);  // Enable data ready (bit 0) interrupt
     delay(100);
 
@@ -193,7 +224,7 @@ void MPU_9250::calibrateMPU9250(float* gyroBias, float* accelBias)
 {  
   int32_t accel_bias[3] = {0, 0, 0}, gyro_bias[3] = {0, 0, 0};
   int32_t accel_bias_reg[3] = {0, 0, 0}; // A place to hold the factory accelerometer trim biases
-  uint8_t data[6]; // data array to hold accelerometer and gyro x, y, z, data
+  uint8_t data[14]; // data array to hold accelerometer and gyro x, y, z, data
   uint32_t mask = 1uL; // Define mask for temperature compensation bit 0 of lower byte of accelerometer bias registers
   uint8_t mask_bit[3] = {0, 0, 0}; // Define array to hold mask bit for each accelerometer bias axis
 
@@ -216,15 +247,14 @@ void MPU_9250::calibrateMPU9250(float* gyroBias, float* accelBias)
 
   for(int i = 0; i < CALIBRATION_ROUNDS; i++)
   {
-    readBytes(MPU9250_ADDRESS, ACCEL_XOUT_H, 6, data); // read data for averaging
+    readBytes(MPU9250_ADDRESS, ACCEL_XOUT_H, 14, data); // read data for averaging
     accel_bias[0] += ((int16_t)data[0] << 8) | data[1];
     accel_bias[1] += ((int16_t)data[2] << 8) | data[3];
     accel_bias[2] += ((int16_t)data[4] << 8) | data[5];
 
-    readBytes(MPU9250_ADDRESS, GYRO_XOUT_H, 6, data); // read data for averaging
-    gyro_bias[0] += ((int16_t)data[0] << 8) | data[1];
-    gyro_bias[1] += ((int16_t)data[2] << 8) | data[3];
-    gyro_bias[2] += ((int16_t)data[4] << 8) | data[5];
+    gyro_bias[0] += ((int16_t)data[8] << 8) | data[9];
+    gyro_bias[1] += ((int16_t)data[10] << 8) | data[11];
+    gyro_bias[2] += ((int16_t)data[12] << 8) | data[13];
   }
 
   accel_bias[0] = (int32_t)accel_bias[0] / CALIBRATION_ROUNDS;
@@ -249,7 +279,7 @@ void MPU_9250::calibrateMPU9250(float* gyroBias, float* accelBias)
   data[3] = (-gyro_bias[1]/4)       & 0xFF;
   data[4] = (-gyro_bias[2]/4  >> 8) & 0xFF;
   data[5] = (-gyro_bias[2]/4)       & 0xFF;
-
+  
   // Push gyro biases to hardware registers
   writeByte(MPU9250_ADDRESS, XG_OFFSET_H, data[0]);
   writeByte(MPU9250_ADDRESS, XG_OFFSET_L, data[1]);
@@ -286,14 +316,12 @@ void MPU_9250::calcMagCalibrationData(float* dest1, float* dest2)
   int32_t mag_bias[3] = {0, 0, 0}, mag_scale[3] = {0, 0, 0};
   int16_t mag_max[3] = {-32767, -32767, -32767}, mag_min[3] = {32767, 32767, 32767}, mag_temp[3] = {0, 0, 0};
 
-  
-  
   Serial.println("Mag Calibration: Wave device in a figure eight until done!");
   delay(4000);
   
-  // shoot for ~fifteen seconds of mag data
-  if(Mmode == 0x02) sample_count = 128;  // at 8 Hz ODR, new mag data is available every 125 ms
-  if(Mmode == 0x06) sample_count = 1500;  // at 100 Hz ODR, new mag data is available every 10 ms
+  // shoot for ~thirty seconds of mag data
+  if(Mmode == 0x02) sample_count = 240;  // at 8 Hz ODR, new mag data is available every 125 ms
+  if(Mmode == 0x06) sample_count = 3000;  // at 100 Hz ODR, new mag data is available every 10 ms
   
   for(ii = 0; ii < sample_count; ii++)
   {
@@ -314,9 +342,6 @@ void MPU_9250::calcMagCalibrationData(float* dest1, float* dest2)
   mag_bias[1]  = (mag_max[1] + mag_min[1])/2;  // get average y mag bias in counts
   mag_bias[2]  = (mag_max[2] + mag_min[2])/2;  // get average z mag bias in counts
 
-  // calculates mRes 
-  getMres();
-  
   dest1[0] = (float) mag_bias[0] * mRes * magCalibration[0];  // save mag biases in G for main program
   dest1[1] = (float) mag_bias[1] * mRes * magCalibration[1];
   dest1[2] = (float) mag_bias[2] * mRes * magCalibration[2];
