@@ -1,7 +1,13 @@
 #include <Wire.h>
 #include "MPU_9250.h"
+#include "quaternionFilters.h"
+
+#define DEG_TO_RAD PI / 180.0f
+#define RAD_TO_DEG 180.f / PI
 
 float ax, ay, az, gx, gy, gz, mx, my, mz;
+
+float roll, pitch, yaw;
 
 float deltat = 0.0f, sum = 0.0f;  // integration interval for both filter schemes
 uint32_t lastUpdate = 0;                        // used to calculate integration interval
@@ -39,10 +45,30 @@ void loop()
   deltat = ((now - lastUpdate) / 1000000.0f); // set integration time by time elapsed since last filter update
   lastUpdate = now;
 
-  //MadgwickQuaternionUpdate(-ax, ay, az, gx*PI/180.0f, -gy*PI/180.0f, -gz*PI/180.0f, my, -mx, mz);
-  //MahonyQuaternionUpdate(ax, ay, az, gx*PI/180.0f, gy*PI/180.0f, gz*PI/180.0f, my, mx, mz);
+  //MadgwickQuaternionUpdate(-ax, ay, az, gx * PI / 180.0f, -gy * PI / 180.0f, -gz * PI / 180.0f, my, -mx, mz, deltat);
+  MahonyQuaternionUpdate(ax, ay, az, gx * DEG_TO_RAD, gy * DEG_TO_RAD, gz * DEG_TO_RAD, my, mx, mz, deltat);
 
-  Serial.print("rate = "); Serial.print(deltat, 4); Serial.println(" Hz");
+  yaw   = atan2(2.0f * (*(getQ()+1) * *(getQ()+2) + *getQ() *
+                    *(getQ()+3)), *getQ() * *getQ() + *(getQ()+1) * *(getQ()+1)
+                    - *(getQ()+2) * *(getQ()+2) - *(getQ()+3) * *(getQ()+3));
+  pitch = -asin(2.0f * (*(getQ()+1) * *(getQ()+3) - *getQ() *
+                    *(getQ()+2)));
+  roll  = atan2(2.0f * (*getQ() * *(getQ()+1) + *(getQ()+2) *
+                    *(getQ()+3)), *getQ() * *getQ() - *(getQ()+1) * *(getQ()+1)
+                    - *(getQ()+2) * *(getQ()+2) + *(getQ()+3) * *(getQ()+3));
+  pitch *= RAD_TO_DEG;
+  yaw   *= RAD_TO_DEG;
+      // Declination of SparkFun Electronics (40°05'26.6"N 105°11'05.9"W) is
+      //   8° 30' E  ± 0° 21' (or 8.5°) on 2016-07-19
+      // - http://www.ngdc.noaa.gov/geomag-web/#declination
+  yaw   -= 8.5;
+  roll *= RAD_TO_DEG;
+
+  Serial.print((int)roll);Serial.print(" ");
+  Serial.print((int)pitch);Serial.print(" ");
+  Serial.print((int)yaw); Serial.println("");
+
+  //Serial.print("rate = "); Serial.print(deltat, 4); Serial.println(" Hz");
 }
 
 void imuRead()
