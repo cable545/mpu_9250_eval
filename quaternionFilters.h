@@ -6,6 +6,9 @@
 void MadgwickQuaternionUpdate(float ax, float ay, float az, float gx, float gy,
                               float gz, float mx, float my, float mz,
                               float deltat);
+
+void MadgwickUpdate(float gx, float gy, float gz, float ax, float ay, float az, float deltat);
+                              
 void MahonyQuaternionUpdate(float ax, float ay, float az, float gx, float gy,
                             float gz, float mx, float my, float mz,
                             float deltat);

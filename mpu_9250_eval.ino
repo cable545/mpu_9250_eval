@@ -20,8 +20,8 @@ void setup()
   Wire.begin();
   Serial.begin(57600);
 
-  Serial.println("MPU_9250 starting calibration");
-  mpu9250.calibrateMPU9250(mpu9250.gyroBias, mpu9250.accelBias);
+//  Serial.println("MPU_9250 starting calibration");
+//  mpu9250.calibrateMPU9250(mpu9250.gyroBias, mpu9250.accelBias);
   
   Serial.println("Initializing MPU_9250");
   mpu9250.initMPU9250();
@@ -39,14 +39,16 @@ void setup()
 void loop()
 {
   imuRead();
-  magRead();
+  //magRead();
 
+  /*
   now = micros();
   deltat = ((now - lastUpdate) / 1000000.0f); // set integration time by time elapsed since last filter update
   lastUpdate = now;
 
-  //MadgwickQuaternionUpdate(-ax, ay, az, gx * PI / 180.0f, -gy * PI / 180.0f, -gz * PI / 180.0f, my, -mx, mz, deltat);
+  //MadgwickQuaternionUpdate(ax, ay, az, gx * DEG_TO_RAD, gy * DEG_TO_RAD, gz * DEG_TO_RAD, my, mx, mz, deltat);
   MahonyQuaternionUpdate(ax, ay, az, gx * DEG_TO_RAD, gy * DEG_TO_RAD, gz * DEG_TO_RAD, my, mx, mz, deltat);
+  //MadgwickUpdate(ax, ay, az, gx * DEG_TO_RAD, gy * DEG_TO_RAD, gz * DEG_TO_RAD, deltat);
 
   yaw   = atan2(2.0f * (*(getQ()+1) * *(getQ()+2) + *getQ() *
                     *(getQ()+3)), *getQ() * *getQ() + *(getQ()+1) * *(getQ()+1)
@@ -58,17 +60,16 @@ void loop()
                     - *(getQ()+2) * *(getQ()+2) + *(getQ()+3) * *(getQ()+3));
   pitch *= RAD_TO_DEG;
   yaw   *= RAD_TO_DEG;
-      // Declination of SparkFun Electronics (40°05'26.6"N 105°11'05.9"W) is
-      //   8° 30' E  ± 0° 21' (or 8.5°) on 2016-07-19
+      //   5.75° W  ± 0.37° (or 5.75°) on 2018-02-09
       // - http://www.ngdc.noaa.gov/geomag-web/#declination
-  yaw   -= 8.5;
+  yaw   -= 5.75;
   roll *= RAD_TO_DEG;
-
-  Serial.print((int)roll);Serial.print(" ");
-  Serial.print((int)pitch);Serial.print(" ");
-  Serial.print((int)yaw); Serial.println("");
-
-  //Serial.print("rate = "); Serial.print(deltat, 4); Serial.println(" Hz");
+  
+  Serial.print("Orientation: ");
+  Serial.print(roll);Serial.print(" ");
+  Serial.print(pitch);Serial.print(" ");
+  Serial.print(yaw); Serial.println("");
+  */
 }
 
 void imuRead()
@@ -79,18 +80,18 @@ void imuRead()
     
     mpu9250.readAccGyroData(imuData);
 
-    ax = (float)imuData[0] / AFS_2G_SENS - mpu9250.accelBias[0];
-    ay = (float)imuData[1] / AFS_2G_SENS - mpu9250.accelBias[1];
-    az = (float)imuData[2] / AFS_2G_SENS - mpu9250.accelBias[2];
+    ax = (float)imuData[0] / AFS_2G_SENS;
+    ay = (float)imuData[1] / AFS_2G_SENS;
+    az = (float)imuData[2] / AFS_2G_SENS;
 
     gx = (float)imuData[3] * GFS_250_SENS;
     gy = (float)imuData[4] * GFS_250_SENS;
     gz = (float)imuData[5] * GFS_250_SENS;
 
     //Serial.println("Acc Data");
-    //Serial.print(ax);Serial.print(" ");
-    //Serial.print(ay);Serial.print(" ");
-    //Serial.println(az);
+    Serial.print(ax, 4);Serial.print(" ");
+    Serial.print(ay, 4);Serial.print(" ");
+    Serial.println(az, 4);
     
     //Serial.println("Gyro Data");
     //Serial.print(gx);Serial.print(" ");

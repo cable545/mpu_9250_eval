@@ -90,7 +90,7 @@
 #define GFS_1000_SENS 1000.0f / 32768.0f
 #define GFS_2000_SENS 2000.0f / 32768.0f
 
-#define CALIBRATION_ROUNDS 10000
+#define CALIBRATION_ROUNDS 20000
 
 #define MAG_BIAS_X  139.34f
 #define MAG_BIAS_Y  359.62f
@@ -99,6 +99,14 @@
 #define MAG_SCALE_X 1.02f
 #define MAG_SCALE_Y 1.03f
 #define MAG_SCALE_Z 0.96f
+
+#define GYRO_OFFSET_X -173
+#define GYRO_OFFSET_Y -10
+#define GYRO_OFFSET_Z -156
+
+#define ACC_OFFSET_X -7519
+#define ACC_OFFSET_Y -3491
+#define ACC_OFFSET_Z 8676
 
 class MPU_9250
 {
@@ -115,13 +123,13 @@ class MPU_9250
 	public:
     MPU_9250();
     // Bias corrections for gyro and accelerometer
-    float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};
+    int32_t gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};
     float magCalibration[3] = {0, 0, 0}, magBias[3] = {0, 0, 0}, magScale[3] = {0, 0, 0};
     float aRes, gRes, mRes;
 
     bool initAK8963(float* destination);
     bool initMPU9250();
-    void calibrateMPU9250(float* gyroBias, float* accelBias);
+    void calibrateMPU9250(int32_t* gyroBias, int32_t* accelBias);
 		void writeByte(uint8_t address, uint8_t subAddress, uint8_t data);
 		uint8_t readByte(uint8_t address, uint8_t subAddress);
 		void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t * dest);

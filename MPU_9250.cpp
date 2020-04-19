@@ -2,6 +2,8 @@
 
 MPU_9250::MPU_9250(void)
 {
+  uint8_t data[6];
+  
   magBias[0] = MAG_BIAS_X;
   magBias[1] = MAG_BIAS_Y;
   magBias[2] = MAG_BIAS_Z;
@@ -9,6 +11,38 @@ MPU_9250::MPU_9250(void)
   magScale[0] = MAG_SCALE_X;
   magScale[1] = MAG_SCALE_Y;
   magScale[2] = MAG_SCALE_Z;
+
+  data[0] = (-GYRO_OFFSET_X/4  >> 8) & 0xFF; // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format
+  data[1] = (-GYRO_OFFSET_X/4)       & 0xFF; // Biases are additive, so change sign on calculated average gyro biases
+  data[2] = (-GYRO_OFFSET_Y/4  >> 8) & 0xFF;
+  data[3] = (-GYRO_OFFSET_Y/4)       & 0xFF;
+  data[4] = (-GYRO_OFFSET_Z/4  >> 8) & 0xFF;
+  data[5] = (-GYRO_OFFSET_Z/4)       & 0xFF;
+  
+  // Push gyro biases to hardware registers
+  writeByte(MPU9250_ADDRESS, XG_OFFSET_H, data[0]);
+  writeByte(MPU9250_ADDRESS, XG_OFFSET_L, data[1]);
+  writeByte(MPU9250_ADDRESS, YG_OFFSET_H, data[2]);
+  writeByte(MPU9250_ADDRESS, YG_OFFSET_L, data[3]);
+  writeByte(MPU9250_ADDRESS, ZG_OFFSET_H, data[4]);
+  writeByte(MPU9250_ADDRESS, ZG_OFFSET_L, data[5]);
+  
+  data[0] = (ACC_OFFSET_X >> 8) & 0xFF;
+  data[1] = (ACC_OFFSET_X)      & 0xFF;
+  data[1] = data[1] | mask_bit[0]; // preserve temperature compensation bit when writing back to accelerometer bias registers
+  data[2] = (ACC_OFFSET_Y >> 8) & 0xFF;
+  data[3] = (ACC_OFFSET_Y)      & 0xFF;
+  data[3] = data[3] | mask_bit[1]; // preserve temperature compensation bit when writing back to accelerometer bias registers
+  data[4] = (ACC_OFFSET_Z >> 8) & 0xFF;
+  data[5] = (ACC_OFFSET_Z)      & 0xFF;
+  data[5] = data[5] | mask_bit[2]; // preserve temperature compensation bit when writing back to accelerometer bias registers
+  
+  writeByte(MPU9250_ADDRESS, XA_OFFSET_H, data[0]);
+  writeByte(MPU9250_ADDRESS, XA_OFFSET_L, data[1]);
+  writeByte(MPU9250_ADDRESS, YA_OFFSET_H, data[2]);
+  writeByte(MPU9250_ADDRESS, YA_OFFSET_L, data[3]);
+  writeByte(MPU9250_ADDRESS, ZA_OFFSET_H, data[4]);
+  writeByte(MPU9250_ADDRESS, ZA_OFFSET_L, data[5]);
 }
 
 // Wire.h read and write protocols
@@ -173,10 +207,10 @@ bool MPU_9250::initMPU9250()
     // be higher than 1 / 0.0059 = 170 Hz
     // DLPF_CFG = bits 2:0 = 011; this limits the sample rate to 1000 Hz for both
     // With the MPU9250, it is possible to get gyro sample rates of 32 kHz (!), 8 kHz, or 1 kHz
-    //writeByte(MPU9250_ADDRESS, CONFIG, 0x03);  
+    writeByte(MPU9250_ADDRESS, CONFIG, 0x03);  
 
     // Set sample rate = gyroscope output rate/(1 + SMPLRT_DIV)
-    //writeByte(MPU9250_ADDRESS, SMPLRT_DIV, 0x04);  // Use a 200 Hz rate; a rate consistent with the filter update rate 
+    writeByte(MPU9250_ADDRESS, SMPLRT_DIV, 0x04);  // Use a 200 Hz rate; a rate consistent with the filter update rate 
                                     // determined inset in CONFIG above
  
     // Set gyroscope full scale range
@@ -220,7 +254,7 @@ bool MPU_9250::initMPU9250()
 // Function which accumulates gyro and accelerometer data after device
 // initialization. It calculates the average of the at-rest readings and then
 // loads the resulting offsets into accelerometer and gyro bias registers.
-void MPU_9250::calibrateMPU9250(float* gyroBias, float* accelBias)
+void MPU_9250::calibrateMPU9250(int32_t* gyroBias, int32_t* accelBias)
 {  
   int32_t accel_bias[3] = {0, 0, 0}, gyro_bias[3] = {0, 0, 0};
   int32_t accel_bias_reg[3] = {0, 0, 0}; // A place to hold the factory accelerometer trim biases
@@ -247,6 +281,7 @@ void MPU_9250::calibrateMPU9250(float* gyroBias, float* accelBias)
 
   for(int i = 0; i < CALIBRATION_ROUNDS; i++)
   {
+    while((readByte(MPU9250_ADDRESS, INT_STATUS) & 0x01) == 0);
     readBytes(MPU9250_ADDRESS, ACCEL_XOUT_H, 14, data); // read data for averaging
     accel_bias[0] += ((int16_t)data[0] << 8) | data[1];
     accel_bias[1] += ((int16_t)data[2] << 8) | data[3];
@@ -273,6 +308,10 @@ void MPU_9250::calibrateMPU9250(float* gyroBias, float* accelBias)
   for(int i = 0; i < 3; i++)
     if((accel_bias_reg[i] & mask)) mask_bit[i] = 0x01; // If temperature compensation bit is set, record that fact in mask_bit
 
+  gyroBias[0] = gyro_bias[0];
+  gyroBias[1] = gyro_bias[1];
+  gyroBias[2] = gyro_bias[2];
+
   data[0] = (-gyro_bias[0]/4  >> 8) & 0xFF; // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format
   data[1] = (-gyro_bias[0]/4)       & 0xFF; // Biases are additive, so change sign on calculated average gyro biases
   data[2] = (-gyro_bias[1]/4  >> 8) & 0xFF;
@@ -291,6 +330,10 @@ void MPU_9250::calibrateMPU9250(float* gyroBias, float* accelBias)
   accel_bias_reg[0] -= accel_bias[0]; // Subtract calculated averaged accelerometer bias scaled to 2048 LSB/g (16 g full scale)
   accel_bias_reg[1] -= accel_bias[1];
   accel_bias_reg[2] -= accel_bias[2];
+
+  accelBias[0] = accel_bias_reg[0];
+  accelBias[1] = accel_bias_reg[1];
+  accelBias[2] = accel_bias_reg[2];
   
   data[0] = (accel_bias_reg[0] >> 8) & 0xFF;
   data[1] = (accel_bias_reg[0])      & 0xFF;
